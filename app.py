@@ -24,6 +24,43 @@ from langchain_openai import ChatOpenAI
 from langchain_community.document_loaders import PyPDFLoader, TextLoader, CSVLoader, Docx2txtLoader
 import os
 
+def get_document_loaders(file_name):
+    """
+    Returns the appropriate loader based on the document format.
+
+    Args:
+        file_name: The name of the file including the extension.
+    
+    Returns:
+        loader: The corresponding document loader.
+    """ 
+    loaders = {
+        '.pdf': PyPDFLoader,
+        '.docx': Docx2txtLoader,
+        '.txt': lambda fn: TextLoader(fn, encoding="utf-8")
+    }
+    
+    for extension, loader in loaders.items():
+        if file_name.endswith(extension):
+            return loader(file_name)
+    
+    return None
+
+def get_documents(loader, chunk_size, chunk_overlap):
+    """
+    Returns the split documents.
+    
+    Args:
+        loader: Document loader.
+        chunk_size: Size of the chunks.
+        chunk_overlap: Overlap between chunks.
+
+    Returns:
+        splitted_documents: The list of split documents.
+    """
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+    return loader.load_and_split(text_splitter=text_splitter)
+
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 
@@ -59,8 +96,23 @@ from fastapi import Form  # 추가 임포트
 @app.post("/chat")
 async def chat(user_input: str = Form(...), files: List[UploadFile] = File(default=None)):
     print(f"User input: {user_input}")
+        # 파일 처리 (예: 파일 저장)
+    doc_list = []
+    if files:
+        for file in files:
+            # 파일의 확장자에 따라 적절한 로더 사용
+            file_path = f"temp_{file.filename}"
+            with open(file_path, "wb") as f:
+                f.write(await file.read())
+            print(f"Uploaded file: {file.filename}")
+            loader = get_document_loaders(file.filename)
+            splitted_documents = get_documents(loader=loader, chunk_size=1000, chunk_overlap=100)
+            doc_list.extend(splitted_documents)
+            print(doc_list[1])
+            os.remove(file_path)
 
     response = chain.invoke(user_input)
+    print(f"response: {response.content}")
     return {"response": response.content}
 
 if __name__ == "__main__":
