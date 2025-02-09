@@ -75,7 +75,38 @@ def get_vectorstore(doc_list):
     embeddings = OpenAIEmbeddings() #BPE encoding
     return faiss.FAISS.from_documents(doc_list, embeddings)
 
+def get_chain(usage, retriever):
+    if usage == "document_search":
 
+        prompt = PromptTemplate.from_template(
+            """You are an assistant for question-answering tasks. 
+        Use the following pieces of retrieved context to answer the question. 
+        If you don't know the answer, just say that you don't know. 
+        Answer in Korean.
+
+        #Context: 
+        {context}
+
+        #Question:
+        {question}
+
+        #Answer:"""
+        )
+
+        chain = (
+            {"context": retriever, "question": RunnablePassthrough()}
+            | prompt
+            | ChatOpenAI(model="gpt-4o-mini", temperature=0)
+            )
+    else:
+        prompt = PromptTemplate(
+        template="""You are a helpful assistant. 
+        Answer the following question. 
+        Answer in Korean: {user_input}""",
+        input_variables=["user_input"]
+        )
+        chain = prompt | llm 
+    return chain
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 
@@ -118,10 +149,16 @@ async def read_root(request: Request):
 from fastapi import Form  # 추가 임포트
 
 @app.post("/chat")
-async def chat(user_input: str = Form(...), files: List[UploadFile] = File(default=None)):
+async def chat(
+    user_input: str = Form(...), 
+    files: List[UploadFile] = File(default=None),
+    usage: str = Form(...),  # 선택한 용도를 받는 부분
+    ):
     print(f"User input: {user_input}")  # log
+    print(f"Selected usage: {usage}")
     # RAG
     doc_list = []
+    retriever = None
     if files:
         for file in files:
             file_path = f"temp_{file.filename}"
@@ -133,21 +170,19 @@ async def chat(user_input: str = Form(...), files: List[UploadFile] = File(defau
             loader = get_document_loaders(file.filename)
             splitted_documents = get_documents(loader=loader, chunk_size=1000, chunk_overlap=100)
             doc_list.extend(splitted_documents)
-            print(doc_list[1])
+            print(doc_list[0])
             os.remove(file_path)
-        vector_store = get_vectorstore(doc_list=doc_list)
+
+        vector_store = get_vectorstore(doc_list)
         if vector_store is None:
             raise ValueError("Error: vector_store is not initialized.")
         retriever = vector_store.as_retriever()
-    # chain 구성성
-    chain = (
-    {"context": retriever, "question": RunnablePassthrough()}
-    | prompt
-    | llm
-)
+    
+    chain = get_chain(usage, retriever)
     response = chain.invoke(user_input)
     print(f"response: {response.content}")
     return {"response": response.content}
+
 
 if __name__ == "__main__":
     import uvicorn

@@ -14,48 +14,54 @@
 </head>
 <body>
     <h1>🤗 My Assistant</h1>
+    
+    <!-- 용도 선택 창 추가 -->
+    <label for="usage-select">대화 목적을 선택하세요:</label>
+    <select id="usage-select">
+        <option value="general">일반</option>
+        <option value="document_search">문서</option>
+        <option value="web_search">URL</option>
+    </select>
+
     <div id="chatbox"></div>
-    <form id="chatForm" enctype="multipart/form-data"> <!-- enctype 속성 추가 -->
+    <form id="chatForm" enctype="multipart/form-data">
+        <input type="file" id="file_input" accept=".txt, .pdf, .docx, .hwp" multiple/>
         <input type="text" id="user_input" placeholder="Ask me anything..." required>
-        <input type="file" id="file_input" accept=".txt,.pdf" /> <!-- 파일 입력 추가 -->
-        
-        <!-- 제출 버튼 -->
         <button type="submit">Submit</button>
     </form>
 
     <script>
         document.getElementById('chatForm').addEventListener('submit', async function(event) {
-            event.preventDefault(); // 페이지 새로고침 방지
+            event.preventDefault();
             const userInput = document.getElementById('user_input').value;
-            const fileInput = document.getElementById('file_input').files[0]; // 파일 입력 가져오기
+            const fileInput = document.getElementById('file_input').files[0];
+            const usageSelect = document.getElementById('usage-select').value; // 선택된 용도 가져오기
 
-            // 사용자 입력을 채팅창에 추가
             const chatbox = document.getElementById('chatbox');
             chatbox.innerHTML += `<div class="message user">User: ${userInput}</div>`;
 
-            // FormData 객체 생성
             const formData = new FormData();
             formData.append('user_input', userInput);
+            formData.append('usage', usageSelect); // 선택된 용도를 FormData에 추가
             if (fileInput) {
-                formData.append('file', fileInput); // 파일을 FormData에 추가
+                formData.append('files', fileInput); // 파일을 FormData에 추가
             }
 
-            // FastAPI 서버에 요청
             const response = await fetch('/chat', {
                 method: 'POST',
-                body: formData, // FormData 사용
+                body: formData,
             });
 
             if (response.ok) {
                 const data = await response.json();
                 chatbox.innerHTML += `<div class="message assistant">Assistant: ${data.response}</div>`;
             } else {
-                chatbox.innerHTML += `<div class="message assistant">Error: Unable to get a response.</div>`;
+                chatbox.innerHTML += `<div class="message assistant">Error: 응답을 생성할 수 없습니다. 목적을 다시 확인해주세요.</div>`;
             }
 
-            document.getElementById('user_input').value = ''; // 입력 필드 초기화
-            document.getElementById('file_input').value = ''; // 파일 필드 초기화
-            chatbox.scrollTop = chatbox.scrollHeight; // 스크롤을 맨 아래로
+            document.getElementById('user_input').value = '';
+            document.getElementById('file_input').value = '';
+            chatbox.scrollTop = chatbox.scrollHeight;
         });
     </script>
 </body>
