@@ -15,11 +15,12 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_core.messages import ChatMessage
 from langchain_core.prompts import PromptTemplate, ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables.history import RunnableWithMessageHistory
+from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 from langchain_community.vectorstores import faiss
 
 # LangChain OpenAI
-from langchain_openai import ChatOpenAI
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 # LanChain Community
 from langchain_community.document_loaders import PyPDFLoader, TextLoader, CSVLoader, Docx2txtLoader
 import os
@@ -61,6 +62,20 @@ def get_documents(loader, chunk_size, chunk_overlap):
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
     return loader.load_and_split(text_splitter=text_splitter)
 
+def get_vectorstore(doc_list):
+    """
+    Stores document embeddings in a vector store and returns it.
+
+    Args:
+        doc_list: The list of documents.
+
+    Returns:
+        vectorstore: The vector store containing document embeddings.
+    """
+    embeddings = OpenAIEmbeddings() #BPE encoding
+    return faiss.FAISS.from_documents(doc_list, embeddings)
+
+
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 
@@ -76,12 +91,21 @@ app.add_middleware(
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=1)
 
 # 프롬프트 템플릿 정의
-prompt = PromptTemplate(
-    input_variables=["user_input"],
-    template="You are a helpful assistant. Answer the following question: {user_input}"
+prompt = PromptTemplate.from_template(
+    """You are an assistant for question-answering tasks. 
+Use the following pieces of retrieved context to answer the question. 
+If you don't know the answer, just say that you don't know. 
+Answer in Korean.
+
+#Context: 
+{context}
+
+#Question:
+{question}
+
+#Answer:"""
 )
 
-chain = prompt | llm
 
 # Pydantic 모델 정의
 class UserInput(BaseModel):
@@ -95,22 +119,32 @@ from fastapi import Form  # 추가 임포트
 
 @app.post("/chat")
 async def chat(user_input: str = Form(...), files: List[UploadFile] = File(default=None)):
-    print(f"User input: {user_input}")
-        # 파일 처리 (예: 파일 저장)
+    print(f"User input: {user_input}")  # log
+    # RAG
     doc_list = []
     if files:
         for file in files:
-            # 파일의 확장자에 따라 적절한 로더 사용
             file_path = f"temp_{file.filename}"
             with open(file_path, "wb") as f:
                 f.write(await file.read())
             print(f"Uploaded file: {file.filename}")
+
+            # 파일의 확장자에 따라 적절한 로더 사용
             loader = get_document_loaders(file.filename)
             splitted_documents = get_documents(loader=loader, chunk_size=1000, chunk_overlap=100)
             doc_list.extend(splitted_documents)
             print(doc_list[1])
             os.remove(file_path)
-
+        vector_store = get_vectorstore(doc_list=doc_list)
+        if vector_store is None:
+            raise ValueError("Error: vector_store is not initialized.")
+        retriever = vector_store.as_retriever()
+    # chain 구성성
+    chain = (
+    {"context": retriever, "question": RunnablePassthrough()}
+    | prompt
+    | llm
+)
     response = chain.invoke(user_input)
     print(f"response: {response.content}")
     return {"response": response.content}
