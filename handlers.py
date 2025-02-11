@@ -4,9 +4,8 @@ from fastapi import Request
 from fastapi import APIRouter, Form, UploadFile, File, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from utils import create_upload_directory  # 유틸리티 함수 가져오기
+from utils import create_upload_directory, get_document_loaders, get_documents, get_vectorstore, get_chain
 from models import UserInput  # Pydantic 모델 가져오기
-from document_loaders import get_document_loaders, get_documents, get_vectorstore, get_chain
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
@@ -27,7 +26,7 @@ async def chat(
     files: List[UploadFile] = File(default=None),
     usage: str = Form(...),  # 선택한 용도를 받는 부분
 ):
-    print(f"User input: {user_input}")  # log
+    print(f"User input: {user_input}")
     print(f"Selected usage: {usage}")
     
     doc_list = []
