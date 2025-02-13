@@ -6,7 +6,7 @@
     <title>Chatbot</title>
     <style>
         body { font-family: Arial, sans-serif; }
-        #chatbox { height: 400px; border: 1px solid #ccc; padding: 10px; overflow-y: scroll; }
+        #chatbox { height: 400px; border: 1px solid #ccc; padding: 10px; overflow-y: scroll; display: none; } /* 초기에는 chatbox 숨김 */
         .message { margin: 5px 0; }
         .user { color: blue; }
         .assistant { color: green; }
@@ -15,36 +15,73 @@
 <body>
     <h1>🤗 My Assistant</h1>
     
-    <!-- 용도 선택 창 추가 -->
+    <!-- 용도 선택 창 -->
     <label for="usage-select">대화 목적을 선택하세요:</label>
     <select id="usage-select">
-        <option value="general">일반</option>
+        <option value="" disabled selected hidden>선택하세요</option>
         <option value="document_search">문서</option>
         <option value="web_search">URL</option>
+        <option value="general">일반</option>
     </select>
 
+    <!-- 입력폼 -->
+    <div id="input-form" style="display: none;"> <!-- 기본적으로 숨김 -->
+        <form id="chatForm" enctype="multipart/form-data">
+            <input type="text" id="session_id" placeholder="Enter Session ID" required> <!-- 세션 ID 입력 필드 추가 -->
+            <input type="file" id="file_input" accept=".txt, .pdf, .docx, .hwp" multiple style="display: none;" />
+            <input type="url" id="user_url" placeholder="Enter URL here..." style="display: none;" />
+            <input type="text" id="user_input" placeholder="Ask me anything..." required>
+            <button type="submit">Submit</button>
+        </form>
+    </div>
+
     <div id="chatbox"></div>
-    <form id="chatForm" enctype="multipart/form-data">
-        <input type="file" id="file_input" accept=".txt, .pdf, .docx, .hwp" multiple/>
-        <input type="text" id="user_input" placeholder="Ask me anything..." required>
-        <button type="submit">Submit</button>
-    </form>
 
     <script>
+        // 용도 선택에 따라 입력 양식 변경
+        document.getElementById('usage-select').addEventListener('change', function() {
+            const usage = this.value;
+            const inputForm = document.getElementById('input-form');
+            const fileInput = document.getElementById('file_input');
+            const urlInput = document.getElementById('user_url');
+            const chatbox = document.getElementById('chatbox');
+
+            inputForm.style.display = 'block'; // 입력폼 보이기
+            chatbox.style.display = 'block'; // chatbox 보이기
+
+            if (usage === 'document_search') {
+                fileInput.style.display = 'block'; // 파일 입력 보임
+                urlInput.style.display = 'none'; // URL 입력창 숨김
+            } else if (usage === 'web_search') {
+                fileInput.style.display = 'none'; // 파일 입력 숨김
+                urlInput.style.display = 'block'; // URL 입력창 보임
+            } else if (usage === 'general') {
+                fileInput.style.display = 'none'; // 파일 입력 숨김
+                urlInput.style.display = 'none'; // URL 입력창 숨김
+            }
+        });
+
         document.getElementById('chatForm').addEventListener('submit', async function(event) {
             event.preventDefault();
             const userInput = document.getElementById('user_input').value;
+            const userUrl = document.getElementById('user_url').value; // URL 입력값 가져오기
             const fileInput = document.getElementById('file_input').files[0];
             const usageSelect = document.getElementById('usage-select').value; // 선택된 용도 가져오기
+            const sessionId = document.getElementById('session_id').value; // 세션 ID 입력값 가져오기
 
             const chatbox = document.getElementById('chatbox');
-            chatbox.innerHTML += `<div class="message user">User: ${userInput}</div>`;
+            chatbox.innerHTML += `<div class="message user">User: ${userInput || userUrl}</div>`;
 
             const formData = new FormData();
-            formData.append('user_input', userInput);
             formData.append('usage', usageSelect); // 선택된 용도를 FormData에 추가
-            if (fileInput) {
-                formData.append('files', fileInput); // 파일을 FormData에 추가
+            formData.append('session_id', sessionId); // 세션 ID를 FormData에 추가
+            if (usageSelect === 'web_search' && userUrl) {
+                formData.append('user_input', userUrl); // URL을 FormData에 추가
+            } else {
+                formData.append('user_input', userInput); // 사용자 입력을 FormData에 추가
+                if (fileInput) {
+                    formData.append('files', fileInput); // 파일을 FormData에 추가
+                }
             }
 
             const response = await fetch('/chat', {
@@ -61,6 +98,8 @@
 
             document.getElementById('user_input').value = '';
             document.getElementById('file_input').value = '';
+            document.getElementById('user_url').value = ''; // URL 입력 초기화
+            document.getElementById('session_id').value = ''; // 세션 ID 입력 초기화
             chatbox.scrollTop = chatbox.scrollHeight;
         });
     </script>
