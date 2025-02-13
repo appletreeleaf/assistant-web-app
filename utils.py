@@ -1,9 +1,5 @@
 import os
-
-def create_upload_directory(directory: str):
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-        print(f"Created upload directory: {directory}")
+from dotenv import load_dotenv
 
 from typing import List
 import bs4
@@ -15,6 +11,17 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_community.vectorstores import faiss
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnablePassthrough
+from langchain_core.callbacks.base import BaseCallbackHandler
+from langchain.agents import create_openai_functions_agent, AgentExecutor
+from langchain_community.tools.tavily_search import TavilySearchResults
+from langchain.tools.retriever import create_retriever_tool
+
+load_dotenv()
+
+def create_upload_directory(directory: str):
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+        print(f"Created upload directory: {directory}")
 
 def get_document_loaders(file_name):
 
@@ -79,7 +86,52 @@ def get_chain(usage, retriever):
             | prompt
             | ChatOpenAI(model="gpt-4o-mini", temperature=0)
         )
-    else:
+    if usage == 'general':
         chain = prompt | ChatOpenAI(model="gpt-4o-mini", temperature=1)
     return chain
 
+class StreamHandler(BaseCallbackHandler):
+    def __init__(self, container, initial_text="", display_method='markdown'):
+        self.container = container
+        self.text = initial_text
+        self.display_method = display_method
+
+    def on_llm_new_token(self, token: str, **kwargs) -> None:
+        self.text += token
+        display_function = getattr(self.container, self.display_method, None)
+        if display_function is not None:
+            display_function(self.text)
+        else:
+            raise ValueError(f"Invalid display_method: {self.display_method}")
+
+def get_agent_executor(retriever):
+    """
+    Returns the agent executor object.
+
+    Returns:
+        agent_executor: The agent executor object.
+    """
+    search = TavilySearchResults(k=3)
+    tool = create_retriever_tool(
+        retriever=retriever,
+        name="search_documents",
+        description="Searches and returns relevant excerpts from the uploaded documents."
+    )
+    
+    llm = ChatOpenAI(model="gpt-4o-mini", streaming=True)
+    agent_prompt = hub.pull("hwchase17/openai-functions-agent")
+    agent = create_openai_functions_agent(llm, [search, tool], agent_prompt)
+    return AgentExecutor(agent=agent, tools=[search, tool], verbose=True)
+# Base chat message history
+from langchain_core.chat_history import BaseChatMessageHistory
+from langchain_community.chat_message_histories import ChatMessageHistory
+
+
+
+# 세션 ID를 기반으로 세션 기록을 가져오는 함수
+
+def get_session_history(session_id: str, session_histories) -> BaseChatMessageHistory:
+    # 해당 세션 ID에 대한 세션 기록 반환
+    if session_id not in session_histories:  # 세션 ID가 없으면
+        session_histories[session_id] = ChatMessageHistory()
+    return session_histories[session_id]  # 해당 세션 ID에 대한 세션 기록 반환
