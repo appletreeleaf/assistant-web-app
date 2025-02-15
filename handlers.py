@@ -7,16 +7,19 @@ from fastapi.templating import Jinja2Templates
 from langchain_community.chat_message_histories import ChatMessageHistory
 from utils import (create_upload_directory, get_document_loaders, get_documents, 
                    get_vectorstore, get_chain, get_web_loader, get_agent_executor)
+import uuid
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
 
 UPLOAD_DIRECTORY = "uploads"
 session_histories = {}  # 세션 히스토리를 저장할 딕셔너리
+uploaded_files = {}  # 세션 ID에 따른 업로드된 파일을 저장할 딕셔너리
 
 @router.on_event("startup")
 async def startup_event():
     create_upload_directory(UPLOAD_DIRECTORY)  # 업로드 디렉토리 생성
+    
 
 @router.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
@@ -49,13 +52,15 @@ def get_session_history(session_id: str) -> ChatMessageHistory:
 @router.post("/chat")
 async def chat(
     user_input: str = Form(...), 
-    session_id: str = Form(...),  # 세션 ID 추가
     files: List[UploadFile] = File(default=None),
+    session_id: str = Form(...),  # 클라이언트에서 전달받는 세션 ID
     url: Optional[str] = Form(default=None),  # URL 입력을 받는 부분
     usage: str = Form(...),  # 선택한 용도를 받는 부분
 ):
+    print(f"Generated session ID: {session_id}")
     print(f"User input: {user_input}")
     print(f"Selected usage: {usage}")
+    
 
     doc_list = []
     retriever = None
@@ -91,5 +96,12 @@ async def chat(
 
     # 응답을 대화 내역에 추가
     session_history.add_message({"role": "assistant", "content": response["output"]})
-
+    print(history for history in session_history)
     return {"response": response["output"]}
+
+@router.post("/reset")
+async def reset(session_id: str = Form(...)):
+    """Reset the session data."""
+    session_histories.pop(session_id, None)  # 세션 히스토리 초기화
+    uploaded_files.pop(session_id, None)  # 업로드한 파일 초기화
+    return {"message": "Session reset successful"}
