@@ -6,15 +6,40 @@
     <title>Chatbot</title>
     <style>
         body { font-family: Arial, sans-serif; }
-        #chatbox { height: 400px; border: 1px solid #ccc; padding: 10px; overflow-y: scroll; display: none; } /* 초기에는 chatbox 숨김 */
+        #chatbox { height: 400px; border: 1px solid #ccc; padding: 10px; overflow-y: scroll; display: none; }
         .message { margin: 5px 0; }
         .user { color: blue; }
         .assistant { color: green; }
+        /* Spinner 스타일 */
+        .spinner {
+            display: none; /* 초기에는 숨김 */
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 10px auto; /* 중앙 정렬 */
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        /* 안내 문구 스타일 */
+        #loading-message {
+            display: none; /* 초기에는 숨김 */
+            text-align: center;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
     <h1>🤗 My Assistant</h1>
     
+    <!-- 세션 ID 입력 창 추가 -->
+    <label for="session_id">Session ID:</label>
+    <input type="text" id="session_id" placeholder="Enter Session ID" required>
+
     <!-- 용도 선택 창 -->
     <label for="usage-select">대화 목적을 선택하세요:</label>
     <select id="usage-select">
@@ -25,17 +50,20 @@
     </select>
 
     <!-- 입력폼 -->
-    <div id="input-form" style="display: none;"> <!-- 기본적으로 숨김 -->
+    <div id="input-form" style="display: none;">
         <form id="chatForm" enctype="multipart/form-data">
-            <input type="text" id="session_id" placeholder="Enter Session ID" required> <!-- 세션 ID 입력 필드 추가 -->
             <input type="file" id="file_input" accept=".txt, .pdf, .docx, .hwp" multiple style="display: none;" />
             <input type="url" id="user_url" placeholder="Enter URL here..." style="display: none;" />
             <input type="text" id="user_input" placeholder="Ask me anything..." required>
             <button type="submit">Submit</button>
         </form>
+        <button id="resetButton">Reset</button> <!-- Reset 버튼 추가 -->
     </div>
 
-    <div id="chatbox"></div>
+    <div id="chatbox">
+        <div id="loading-message">응답을 생성중입니다...</div> <!-- 안내 문구 추가 -->
+        <div class="spinner"></div> <!-- Spinner 추가 -->
+    </div>
 
     <script>
         // 용도 선택에 따라 입력 양식 변경
@@ -64,16 +92,16 @@
         document.getElementById('chatForm').addEventListener('submit', async function(event) {
             event.preventDefault();
             const userInput = document.getElementById('user_input').value;
-            const userUrl = document.getElementById('user_url').value; // URL 입력값 가져오기
+            const userUrl = document.getElementById('user_url').value;
             const fileInput = document.getElementById('file_input').files[0];
-            const usageSelect = document.getElementById('usage-select').value; // 선택된 용도 가져오기
+            const usageSelect = document.getElementById('usage-select').value;
             const sessionId = document.getElementById('session_id').value; // 세션 ID 입력값 가져오기
 
             const chatbox = document.getElementById('chatbox');
             chatbox.innerHTML += `<div class="message user">User: ${userInput || userUrl}</div>`;
 
             const formData = new FormData();
-            formData.append('usage', usageSelect); // 선택된 용도를 FormData에 추가
+            formData.append('usage', usageSelect);
             formData.append('session_id', sessionId); // 세션 ID를 FormData에 추가
             if (usageSelect === 'web_search' && userUrl) {
                 formData.append('user_input', userUrl); // URL을 FormData에 추가
@@ -84,10 +112,18 @@
                 }
             }
 
+            // Spinner 및 안내 문구 표시
+            document.querySelector('.spinner').style.display = 'block';
+            document.getElementById('loading-message').style.display = 'block';
+
             const response = await fetch('/chat', {
                 method: 'POST',
                 body: formData,
             });
+
+            // Spinner 및 안내 문구 숨기기
+            document.querySelector('.spinner').style.display = 'none';
+            document.getElementById('loading-message').style.display = 'none';
 
             if (response.ok) {
                 const data = await response.json();
@@ -99,9 +135,28 @@
             document.getElementById('user_input').value = '';
             document.getElementById('file_input').value = '';
             document.getElementById('user_url').value = ''; // URL 입력 초기화
-            document.getElementById('session_id').value = ''; // 세션 ID 입력 초기화
             chatbox.scrollTop = chatbox.scrollHeight;
+        });
+
+        // Reset 버튼 클릭 이벤트
+        document.getElementById('resetButton').addEventListener('click', async function() {
+            const response = await fetch('/reset', {
+                method: 'POST',
+                body: new URLSearchParams({
+                    'session_id': document.getElementById('session_id').value // 입력받은 세션 ID 사용
+                })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                alert(data.message);
+                const chatbox = document.getElementById('chatbox');
+                chatbox.innerHTML = '';
+            } else {
+                alert("Error: 세션을 초기화할 수 없습니다.");
+            }
         });
     </script>
 </body>
 </html>
+
