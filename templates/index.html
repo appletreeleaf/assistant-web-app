@@ -4,12 +4,47 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chatbot</title>
+    <!-- Bootstrap CSS 링크 추가 -->
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { font-family: Arial, sans-serif; }
-        #chatbox { height: 400px; border: 1px solid #ccc; padding: 10px; overflow-y: scroll; display: none; }
-        .message { margin: 5px 0; }
-        .user { color: blue; }
-        .assistant { color: green; }
+    body { font-family: Arial, sans-serif; background-color: #f8f9fa; }
+    #chatbox {
+        height: 400px; 
+        border: 1px solid #ccc; 
+        padding: 10px; 
+        overflow-y: scroll; 
+        display: none; 
+        background-color: #ffffff; 
+        border-radius: 10px;
+        }
+        .message {
+            margin: 5px 0; 
+            padding: 10px; 
+            border-radius: 10px; 
+            max-width: 70%; 
+            clear: both; 
+            position: relative; 
+        }
+        .user {
+            background-color: #dbe1e2; 
+            color: black; 
+            float: left; 
+        }
+        .assistant {
+            background-color: #5d77f7; 
+            color: white; 
+            float: right; 
+            padding-left: 10px; /* 왼쪽 패딩 조정 */
+            position: relative; /* 상대 위치 지정 */
+        }
+
+        .robot-icon {
+            position: absolute;
+            left: -35px; /* 말풍선 왼쪽에 위치 */
+            top: 10px; /* 말풍선 세로 중앙에 위치 */
+            width: 35px; /* 아이콘 크기 */
+            height: 35px; /* 아이콘 크기 */
+        }
         /* Spinner 스타일 */
         .spinner {
             display: none; /* 초기에는 숨김 */
@@ -34,35 +69,42 @@
     </style>
 </head>
 <body>
-    <h1>🤗 My Assistant</h1>
-    
-    <!-- 세션 ID 입력 창 추가 -->
-    <label for="session_id">Session ID:</label>
-    <input type="text" id="session_id" placeholder="Enter Session ID" required>
+    <div class="container mt-5"> <!-- Bootstrap 컨테이너 추가 -->
+        <h1 class="text-center">🤗 My Assistant</h1> <!-- 중앙 정렬 -->
+        
+        <!-- 용도 선택 창 -->
+        <div class="form-group">
+            <label for="usage-select">대화 목적을 선택하세요:</label>
+            <select id="usage-select" class="form-control"> <!-- Bootstrap 스타일 적용 -->
+                <option value="" disabled selected hidden>선택하세요</option>
+                <option value="general">일반</option>
+                <option value="document_search">문서</option>
+                <option value="agent">에이전트</option>
+                <option value="web_search">URL</option>
+            </select>
+        </div>
 
-    <!-- 용도 선택 창 -->
-    <label for="usage-select">대화 목적을 선택하세요:</label>
-    <select id="usage-select">
-        <option value="" disabled selected hidden>선택하세요</option>
-        <option value="document_search">문서</option>
-        <option value="web_search">URL</option>
-        <option value="general">일반</option>
-    </select>
+        <!-- 세션 ID 입력 창 추가 -->
+        <div class="form-group">
+            <label for="session_id">Session ID:</label>
+            <input type="text" id="session_id" class="form-control" placeholder="Enter Session ID" required>
+        </div>
 
-    <!-- 입력폼 -->
-    <div id="input-form" style="display: none;">
-        <form id="chatForm" enctype="multipart/form-data">
-            <input type="file" id="file_input" accept=".txt, .pdf, .docx, .hwp" multiple style="display: none;" />
-            <input type="url" id="user_url" placeholder="Enter URL here..." style="display: none;" />
-            <input type="text" id="user_input" placeholder="Ask me anything..." required>
-            <button type="submit">Submit</button>
-        </form>
-        <button id="resetButton">Reset</button> <!-- Reset 버튼 추가 -->
-    </div>
+        <!-- 입력폼 -->
+        <div id="input-form" style="display: none;">
+            <form id="chatForm" enctype="multipart/form-data" class="form-inline">
+                <input type="file" id="file_input" accept=".txt, .pdf, .docx, .hwp" multiple style="display: none;" />
+                <input type="url" id="user_url" class="form-control" placeholder="Enter URL here..." style="display: none; margin-right: 10px;" />
+                <input type="text" id="user_input" class="form-control" placeholder="Ask me anything..." required style="margin-right: 10px;">
+                <button type="submit" class="btn btn-primary">Submit</button>
+            </form>
+            <button id="resetButton" class="btn btn-secondary mt-2">Reset</button> <!-- Reset 버튼 스타일 변경 -->
+        </div>
 
-    <div id="chatbox">
-        <div id="loading-message">응답을 생성중입니다...</div> <!-- 안내 문구 추가 -->
-        <div class="spinner"></div> <!-- Spinner 추가 -->
+        <div id="chatbox">
+            <div id="loading-message">응답을 생성중입니다...</div> <!-- 안내 문구 추가 -->
+            <div class="spinner"></div> <!-- Spinner 추가 -->
+        </div>
     </div>
 
     <script>
@@ -83,6 +125,9 @@
             } else if (usage === 'web_search') {
                 fileInput.style.display = 'none'; // 파일 입력 숨김
                 urlInput.style.display = 'block'; // URL 입력창 보임
+            }else if (usage === 'agent') {
+                fileInput.style.display = 'block'; // 파일 입력 숨김
+                urlInput.style.display = 'none'; // URL 입력창 보임
             } else if (usage === 'general') {
                 fileInput.style.display = 'none'; // 파일 입력 숨김
                 urlInput.style.display = 'none'; // URL 입력창 숨김
@@ -98,7 +143,12 @@
             const sessionId = document.getElementById('session_id').value; // 세션 ID 입력값 가져오기
 
             const chatbox = document.getElementById('chatbox');
-            chatbox.innerHTML += `<div class="message user">User: ${userInput || userUrl}</div>`;
+            chatbox.innerHTML += `
+        <div class="message user">
+            ${userInput || userUrl}
+        </div>`;
+        
+            
 
             const formData = new FormData();
             formData.append('usage', usageSelect);
@@ -124,13 +174,38 @@
             // Spinner 및 안내 문구 숨기기
             document.querySelector('.spinner').style.display = 'none';
             document.getElementById('loading-message').style.display = 'none';
-
             if (response.ok) {
                 const data = await response.json();
-                chatbox.innerHTML += `<div class="message assistant">Assistant: ${data.response}</div>`;
+                chatbox.innerHTML += `
+                    <div class="message assistant">
+                        <img src="https://example.com/robot-icon.png" class="robot-icon" alt="Robot Icon" />
+                        ${data.response}
+                    </div>`;
+                
+                // 관련 질문 표시
+                const referencesHtml = data.references.map(ref => `
+                    <div class="reference-question" style="cursor: pointer; color: blue; text-decoration: underline;">
+                        ${ref}
+                    </div>`).join('');
+                
+                chatbox.innerHTML += `
+                    <div class="message assistant">
+                        <div>관련 질문:</div>
+                        ${referencesHtml}
+                    </div>`;
+                
+                // 관련 질문 클릭 이벤트 추가
+                const referenceQuestions = document.querySelectorAll('.reference-question');
+                referenceQuestions.forEach(question => {
+                    question.addEventListener('click', () => {
+                        document.getElementById('user_input').value = question.innerText; // 클릭한 질문을 user_input에 설정
+                        document.getElementById('chatForm').dispatchEvent(new Event('submit')); // 폼 제출 이벤트 트리거
+                    });
+                });
             } else {
                 chatbox.innerHTML += `<div class="message assistant">Error: 응답을 생성할 수 없습니다. 목적을 다시 확인해주세요.</div>`;
             }
+
 
             document.getElementById('user_input').value = '';
             document.getElementById('file_input').value = '';
@@ -157,6 +232,10 @@
             }
         });
     </script>
+
+    <!-- Bootstrap JS와 jQuery 추가 -->
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.2/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
 </body>
 </html>
-

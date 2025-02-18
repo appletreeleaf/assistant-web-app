@@ -2,11 +2,12 @@ import os
 from typing import List, Optional
 from fastapi import Request
 from fastapi import APIRouter, Form, UploadFile, File, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from langchain_community.chat_message_histories import ChatMessageHistory
 from utils import (create_upload_directory, get_document_loaders, get_documents, 
-                   get_vectorstore, get_chain, get_web_loader, get_agent_executor)
+                   get_vectorstore, get_chain, get_web_loader, get_agent_executor,
+                   generate_questions)
 import uuid
 
 router = APIRouter()
@@ -74,7 +75,7 @@ async def chat(
         
         retriever = vector_store.as_retriever()
 
-    agent_executor = get_agent_executor(retriever)
+    agent_executor = get_agent_executor(usage, retriever)
 
     # Create agent with chat history
     agent_with_chat_history = RunnableWithMessageHistory(
@@ -93,11 +94,13 @@ async def chat(
         {"input": user_input},
         config={"configurable": {"session_id": session_id}}  # 세션 ID를 포함하여 호출
     )
-
+    answer = response["output"]
     # 응답을 대화 내역에 추가
-    session_history.add_message({"role": "assistant", "content": response["output"]})
-    print(history for history in session_history)
-    return {"response": response["output"]}
+    session_history.add_message({"role": "assistant", "content": answer})
+    
+    # 관련질문 생성
+    references = generate_questions(answer)
+    return {"response": answer, "references": references}
 
 @router.post("/reset")
 async def reset(session_id: str = Form(...)):

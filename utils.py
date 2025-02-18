@@ -69,10 +69,12 @@ def get_prompt(usage):
             input_variables=["user_input"]
         )
     rag_prompt = hub.pull("rlm/rag-prompt")
+    agent_prompt = hub.pull("hwchase17/openai-functions-agent")
 
     prompts = {
         "general": basic_prompt,
         "document_search": rag_prompt,
+        "agent" : agent_prompt
     }
     
     return prompts[usage]
@@ -104,7 +106,7 @@ class StreamHandler(BaseCallbackHandler):
         else:
             raise ValueError(f"Invalid display_method: {self.display_method}")
 
-def get_agent_executor(retriever):
+def get_agent_executor(usage, retriever):
     """
     Returns the agent executor object.
 
@@ -114,14 +116,14 @@ def get_agent_executor(retriever):
     search = TavilySearchResults(k=3)
     tool = create_retriever_tool(
         retriever=retriever,
-        name="search_documents",
-        description="Searches and returns relevant excerpts from the uploaded documents."
+        name="document_search",
+        description="use this tool to search information from the PDF document"
     )
     
-    llm = ChatOpenAI(model="gpt-4o-mini", streaming=True)
-    agent_prompt = hub.pull("hwchase17/openai-functions-agent")
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+    agent_prompt = get_prompt(usage)
     agent = create_openai_functions_agent(llm, [search, tool], agent_prompt)
-    return AgentExecutor(agent=agent, tools=[search, tool], verbose=True)
+    return AgentExecutor(agent=agent, tools=[search, tool], verbose=False)
 # Base chat message history
 from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_community.chat_message_histories import ChatMessageHistory
@@ -135,3 +137,33 @@ def get_session_history(session_id: str, session_histories) -> BaseChatMessageHi
     if session_id not in session_histories:  # 세션 ID가 없으면
         session_histories[session_id] = ChatMessageHistory()
     return session_histories[session_id]  # 해당 세션 ID에 대한 세션 기록 반환
+
+def generate_questions(answer) -> List:
+    """
+    Generate questions from the given text using OpenAI's GPT model.
+
+    Args:
+        text: The input text from which to generate questions.
+
+    Returns:
+        List of generated questions.
+    """
+    prompt = PromptTemplate.from_template(
+        """
+        You are an helpful assistant.
+        Based on the given answer, generate follow-up questions. 
+        You must 3 questions and length must under 50 characters.
+
+        Answer: 
+        {answer}
+
+        Questions:
+        """
+    )
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=1)
+
+    chain = prompt | llm
+
+    response = chain.invoke(answer)
+    following_questions = response.content.strip().split("\n")
+    return following_questions
