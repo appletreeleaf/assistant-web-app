@@ -6,6 +6,8 @@
     <title>Chatbot</title>
     <!-- Bootstrap CSS 링크 추가 -->
     <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome CDN 추가 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" integrity="sha384-k6RqeWeci5ZR/Lv4MR0sA0FfDOM1SU5qJ46o+2/lL1zN/1cHfK8y9z6P+YqO2l" crossorigin="anonymous">
     <style>
     body { font-family: Arial, sans-serif; background-color: #f8f9fa; }
     #chatbox {
@@ -28,22 +30,22 @@
         .user {
             background-color: #dbe1e2; 
             color: black; 
-            float: left; 
+            float: right; 
         }
         .assistant {
             background-color: #5d77f7; 
             color: white; 
-            float: right; 
+            float: left; 
             padding-left: 10px; /* 왼쪽 패딩 조정 */
             position: relative; /* 상대 위치 지정 */
         }
 
         .robot-icon {
             position: absolute;
-            left: -35px; /* 말풍선 왼쪽에 위치 */
+            left: -40px; /* 말풍선 왼쪽에 위치 */
             top: 10px; /* 말풍선 세로 중앙에 위치 */
-            width: 35px; /* 아이콘 크기 */
-            height: 35px; /* 아이콘 크기 */
+            width: 30px; /* 아이콘 크기 */
+            height: 30px; /* 아이콘 크기 */
         }
         /* Spinner 스타일 */
         .spinner {
@@ -55,6 +57,20 @@
             height: 30px;
             animation: spin 1s linear infinite;
             margin: 10px auto; /* 중앙 정렬 */
+        }
+        .file-upload {
+            position: relative;
+            display: inline-block;
+        }
+
+        .file-upload-label {
+            cursor: pointer;
+            font-size: 24px; /* 아이콘 크기 조정 */
+            color: #007bff; /* 아이콘 색상 */
+        }
+
+        .file-upload-label:hover {
+            color: #0056b3; /* 호버 시 색상 변경 */
         }
         @keyframes spin {
             0% { transform: rotate(0deg); }
@@ -75,37 +91,111 @@
         <!-- 용도 선택 창 -->
         <div class="form-group">
             <label for="usage-select">대화 목적을 선택하세요:</label>
-            <select id="usage-select" class="form-control"> <!-- Bootstrap 스타일 적용 -->
+                <span class="tooltip-icon" style="cursor: pointer;" onmouseover="showTooltip(this)" onmouseout="hideTooltip(this)"> 💡
+                    <span class="tooltip-text" style="display: none; position: absolute; background-color: #f9f9f9; border: 1px solid #ccc; border-radius: 5px; padding: 5px; z-index: 100;">
+                        대화의 목적을 선택하세요.
+                    </span>
+                </span>
+            <select id="usage-select" class="form-control" onchange="toggleSessionIdInput(); showDescription()"> <!-- 용도 선택 시 함수 호출 -->
                 <option value="" disabled selected hidden>선택하세요</option>
-                <option value="general">일반</option>
-                <option value="document_search">문서</option>
-                <option value="agent">에이전트</option>
-                <option value="web_search">URL</option>
+                <option value="document_search">문서 검색</option>
+                <option value="summarize">페이지 요약</option>
+                <option value="translation">번역</option>
+                <option value="form_email">이메일 작성</option>
+                <option value="form_report">보고서 작성</option>
             </select>
         </div>
 
+        <script>
+            function showTooltip(element) {
+                const tooltip = element.querySelector('.tooltip-text');
+                tooltip.style.display = 'block';
+            }
+
+            function hideTooltip(element) {
+                const tooltip = element.querySelector('.tooltip-text');
+                tooltip.style.display = 'none';
+            }
+        </script>
+
+        <style>
+            .tooltip-icon {
+                position: relative;
+                display: inline-block;
+                margin-left: 5px;
+            }
+
+            .tooltip-text {
+                visibility: hidden;
+                width: 200px;
+                background-color: #f9f9f9;
+                color: #333;
+                text-align: center;
+                border-radius: 6px;
+                padding: 5px;
+                position: absolute;
+                z-index: 1;
+                bottom: 125%; /* 위치 조정 */
+                left: 50%;
+                margin-left: -100px; /* 가운데 정렬 */
+                opacity: 0;
+                transition: opacity 0.3s;
+            }
+
+            .tooltip-icon:hover .tooltip-text {
+                visibility: visible;
+                opacity: 1;
+            }
+        </style>
+
         <!-- 세션 ID 입력 창 추가 -->
-        <div class="form-group">
-            <label for="session_id">Session ID:</label>
-            <input type="text" id="session_id" class="form-control" placeholder="Enter Session ID" required>
+        <div class="form-group" id="session-id-group" style="display: none;"> <!-- 기본적으로 숨김 -->
+            <label for="session_id">Session ID:
+                <span class="tooltip-icon" style="cursor: pointer;" onmouseover="showTooltip(this)" onmouseout="hideTooltip(this)">💡
+                    <span class="tooltip-text" style="display: none; position: absolute; background-color: #f9f9f9; border: 1px solid #ccc; border-radius: 5px; padding: 5px; z-index: 100;">
+                        채팅 ID를 설정합니다. ID를 바탕으로 AI가 대화 내용을 기억하여 대화에 활용합니다.
+                    </span>
+                </span>
+            </label>
+            <input type="text" id="session_id" class="form-control" placeholder="제목을 입력하세요" required>
         </div>
+        
 
         <!-- 입력폼 -->
         <div id="input-form" style="display: none;">
             <form id="chatForm" enctype="multipart/form-data" class="form-inline">
-                <input type="file" id="file_input" accept=".txt, .pdf, .docx, .hwp" multiple style="display: none;" />
-                <input type="url" id="user_url" class="form-control" placeholder="Enter URL here..." style="display: none; margin-right: 10px;" />
+                <div class="file-upload">
+                    <input type="file" id="file_input" accept=".txt, .pdf, .docx, .hwp" multiple style="display: none;" />
+                    <label for="file_input" class="file-upload-label">
+                        <i class="fas fa-paperclip"></i> <!-- 클립 아이콘 -->
+                    </label>
+                </div>                  
+                <input type="text" id="user_url" class="form-control" placeholder="Enter URL here..." style="display: none; margin-right: 10px;" />
                 <input type="text" id="user_input" class="form-control" placeholder="Ask me anything..." required style="margin-right: 10px;">
                 <button type="submit" class="btn btn-primary">Submit</button>
             </form>
             <button id="resetButton" class="btn btn-secondary mt-2">Reset</button> <!-- Reset 버튼 스타일 변경 -->
         </div>
-
         <div id="chatbox">
             <div id="loading-message">응답을 생성중입니다...</div> <!-- 안내 문구 추가 -->
             <div class="spinner"></div> <!-- Spinner 추가 -->
         </div>
     </div>
+
+    <script>
+        // 용도 선택에 따라 Session ID 입력창의 표시 상태를 조절하는 함수
+        function toggleSessionIdInput() {
+            const usageSelect = document.getElementById('usage-select');
+            const sessionIdGroup = document.getElementById('session-id-group');
+            
+            // 선택된 값이 있을 경우 세션 ID 입력창 보이기
+            if (usageSelect.value) {
+                sessionIdGroup.style.display = 'block'; // 선택된 경우 보이도록 설정
+            } else {
+                sessionIdGroup.style.display = 'none'; // 선택되지 않은 경우 숨김
+            }
+        }
+    </script>
 
     <script>
         // 용도 선택에 따라 입력 양식 변경
@@ -122,10 +212,10 @@
             if (usage === 'document_search') {
                 fileInput.style.display = 'block'; // 파일 입력 보임
                 urlInput.style.display = 'none'; // URL 입력창 숨김
-            } else if (usage === 'web_search') {
-                fileInput.style.display = 'none'; // 파일 입력 숨김
-                urlInput.style.display = 'block'; // URL 입력창 보임
-            }else if (usage === 'agent') {
+            } else if (usage === 'summarize') {
+                fileInput.style.display = 'block'; // 파일 입력 숨김
+                urlInput.style.display = 'none'; // URL 입력창 보임
+            }else if (usage === 'agentic_rag') {
                 fileInput.style.display = 'block'; // 파일 입력 숨김
                 urlInput.style.display = 'none'; // URL 입력창 보임
             } else if (usage === 'general') {
@@ -149,18 +239,18 @@
         </div>`;
         
             
-
             const formData = new FormData();
             formData.append('usage', usageSelect);
             formData.append('session_id', sessionId); // 세션 ID를 FormData에 추가
-            if (usageSelect === 'web_search' && userUrl) {
-                formData.append('user_input', userUrl); // URL을 FormData에 추가
-            } else {
-                formData.append('user_input', userInput); // 사용자 입력을 FormData에 추가
-                if (fileInput) {
-                    formData.append('files', fileInput); // 파일을 FormData에 추가
-                }
+
+            // 각각의 입력값을 FormData에 추가
+            formData.append('user_input', userInput); // 사용자 입력을 FormData에 추가
+            formData.append('url', userUrl); // URL을 FormData에 추가
+
+            if (fileInput) {
+                formData.append('files', fileInput); // 파일을 FormData에 추가
             }
+
 
             // Spinner 및 안내 문구 표시
             document.querySelector('.spinner').style.display = 'block';
@@ -178,13 +268,13 @@
                 const data = await response.json();
                 chatbox.innerHTML += `
                     <div class="message assistant">
-                        <img src="https://example.com/robot-icon.png" class="robot-icon" alt="Robot Icon" />
+                        <img src="/static/images/robot-icon.png" class="robot-icon" alt="Robot Icon" />
                         ${data.response}
                     </div>`;
                 
                 // 관련 질문 표시
                 const referencesHtml = data.references.map(ref => `
-                    <div class="reference-question" style="cursor: pointer; color: blue; text-decoration: underline;">
+                    <div class="reference-question" style="cursor: pointer; color: white; text-decoration: underline;">
                         ${ref}
                     </div>`).join('');
                 
@@ -225,8 +315,16 @@
             if (response.ok) {
                 const data = await response.json();
                 alert(data.message);
+
+                // 입력 필드 초기화
+                document.getElementById('user_input').value = ''; // 사용자 질문 필드 초기화
+                document.getElementById('user_url').value = ''; // URL 필드 초기화
+                document.getElementById('file_input').value = ''; // 파일 입력 초기화
+
+                // 채팅 박스 초기화
                 const chatbox = document.getElementById('chatbox');
-                chatbox.innerHTML = '';
+                chatbox.innerHTML = ''; // 채팅 박스 내용 초기화
+
             } else {
                 alert("Error: 세션을 초기화할 수 없습니다.");
             }
