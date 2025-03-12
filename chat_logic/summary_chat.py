@@ -1,3 +1,4 @@
+import os
 from typing import List, Optional
 from fastapi import UploadFile
 from langchain import hub
@@ -6,15 +7,10 @@ from langchain_openai import ChatOpenAI
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_core.output_parsers import StrOutputParser
 from utils import (generate_questions, remove_sources, process_documents,
-                   get_session_history, get_llm, get_prompt)
+                   get_session_history, get_llm, get_prompt, get_document_loaders)
 
 from langchain_core.runnables import chain
 
-@chain
-def stuff_chain(docs, prompt):
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-    stuff_chain = create_stuff_documents_chain(llm, prompt)
-    return stuff_chain
 
 @chain
 def map_reduce_chain(docs):
@@ -44,6 +40,8 @@ def map_reduce_chain(docs):
 
     return reduce_chain.invoke({"doc_summaries": doc_summaries, "language": "Korean"})
 
+UPLOAD_DIRECTORY = "uploads"
+uploaded_files = {} 
 
 async def handle_summarize(user_input: str, files: List[UploadFile], 
                       session_id: str, url: Optional[str], 
@@ -55,9 +53,21 @@ async def handle_summarize(user_input: str, files: List[UploadFile],
     print(f"Selected usage: {usage}")
     
     doc_list = []
-    # 파일 처리
     if files:
-        doc_list = await process_documents(doc_list, files=files, session_id=session_id)
+        for file in files:
+            file_name = os.path.join(UPLOAD_DIRECTORY, file.filename)  # 업로드할 디렉토리 지정 
+            with open(file_name, "wb") as f:
+                f.write(await file.read())
+            print(f"Uploaded file: {file.filename}")
+
+            # 파일의 확장자에 따라 적절한 로더 사용
+            loader = get_document_loaders(file_name)
+            docs = loader.load()
+            doc_list.extend(docs)
+            if session_id not in uploaded_files:
+                uploaded_files[session_id] = []
+            uploaded_files[session_id].append(file_name)  # 세션 ID에 파일 경로 추가
+            os.remove(file_name)
     
     if doc_list:
         doc_len = "long" if len(doc_list) > 10 else "short"
@@ -66,33 +76,16 @@ async def handle_summarize(user_input: str, files: List[UploadFile],
         if doc_len == "long":
             response = map_reduce_chain.invoke(doc_list)
         else:
-            chain = stuff_chain(doc_list, prompt)
-
-            # Create agent with chat history
-            chain_with_chat_history = RunnableWithMessageHistory(
-                chain,
-                get_session_history,  # 직접 get_session_history 함수 전달
-                input_messages_key="input",
-                history_messages_key="chat_history"
-            )
-
-        # 에이전트를 통해 응답 생성
-            response = chain_with_chat_history.invoke(
-                {"context": doc_list},
-                config={"configurable": {"session_id": session_id}}  # 세션 ID를 포함하여 호출
-            )
-        
-        # 특수문자 제거
-        answer = remove_sources(response)
-        
+            chain = create_stuff_documents_chain(llm=get_llm(), prompt=get_prompt(usage)[doc_len])
+            response = chain.invoke({"context": doc_list})
 
         # 대화 내역에 사용자 입력 추가
         session_history = get_session_history(session_id)
         session_history.add_message({"role": "user", "content": user_input})
         # 응답을 대화 내역에 추가
-        session_history.add_message({"role": "assistant", "content": answer})
+        session_history.add_message({"role": "assistant", "content": response})
         
         # 관련질문 생성
-        references = generate_questions(answer)
-    
-    return {"response": answer, "references": references}
+        references = generate_questions(response)
+        print(response)
+    return {"response": response, "references": references}
