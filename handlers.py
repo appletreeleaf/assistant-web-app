@@ -7,10 +7,12 @@ from fastapi import APIRouter, Form, UploadFile, File, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from utils import create_upload_directory, reset_session
-from chat_logic.agentic_rag_chat import handle_rag  # 모듈 import
-from chat_logic.summary_chat import handle_summarize
+from chat_logic.document_assistant import handle_document, handle_url  # 모듈 import
+from chat_logic.summarizer import handle_summarize
 from chat_logic.report_maker import handle_report
-from chat_logic.selres_chat import handle_selres
+from chat_logic.recommend_place import handle_recommender
+from chat_logic.translator import handle_translation
+from chat_logic.manager import handle_schedule
 
 # 환경변수
 load_dotenv()
@@ -29,21 +31,28 @@ async def read_root(request: Request):
 
 @router.post("/chat")
 async def chat(
-    user_input: str = Form(...), 
+    user_input: str = Form(...),
     files: List[UploadFile] = File(default=None),
     session_id: str = Form(...),  # 클라이언트에서 전달받는 세션 ID
     url: Optional[str] = Form(default=None),  # URL 입력을 받는 부분
     usage: str = Form(...),  # 선택한 용도를 받는 부분
 ):
-    
     if usage=="document_search":
-        return await handle_rag(user_input, files, session_id, url, usage)
+        if files:
+            return await handle_document(user_input, files, session_id, usage)
+        else:
+            return await handle_url(user_input, session_id, url, usage)         
     elif usage=="summarize":
         return await handle_summarize(user_input, files, session_id, url, usage)
     elif usage=="write_report":
         return await handle_report(user_input, files, session_id, url, usage)
-    elif usage=="select_restaurant":
-        return await handle_selres(user_input, files, session_id, url, usage)
+    elif usage=="recommend_place":
+        return await handle_recommender(user_input, files, session_id, url, usage)
+    elif usage=="translation":
+        return await handle_translation(user_input, user_input2, files, session_id, url, usage)
+    elif usage=="schedule_management":
+        return await handle_schedule(user_input, session_id, usage)
+    
 
 @router.post("/reset")
 async def reset(session_id: str = Form(...)):
