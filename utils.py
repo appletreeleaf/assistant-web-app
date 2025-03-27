@@ -44,8 +44,9 @@ def get_document_loaders(file_name):
     return None
 
 def get_web_loader(url):
+    print(f"get_web_loader's url: {url}")
     loader = WebBaseLoader(
-        web_paths=[url],
+        web_paths=(url, ),
         bs_kwargs=dict(
             parse_only=bs4.SoupStrainer(
                 "div",
@@ -70,7 +71,17 @@ def get_vectorstore(doc_list):
     vectorstore = faiss.FAISS.from_documents(doc_list, embeddings)
     return vectorstore
 
-def get_prompt(usage):
+from langchain_core.prompts import MessagesPlaceholder
+def get_prompt():
+    general_prompt = ChatPromptTemplate.from_messages(
+        [
+            # 시스템 메시지
+            ("system", "You are a helpful assistant."),
+            # 대화 기록을 위한 Placeholder
+            MessagesPlaceholder(variable_name="chat_history"),
+            ("human", "{user_input}"),  # 질문
+        ]
+    )
     summary_stuff_prompt = hub.pull("teddynote/summary-stuff-documents-korean")
     summary_map_prompt = hub.pull("teddynote/map-prompt")
     agent_prompt = hub.pull("hwchase17/openai-functions-agent")
@@ -79,10 +90,12 @@ def get_prompt(usage):
         "document_search": agent_prompt,
         "summarize": {"short": summary_stuff_prompt, "long": summary_map_prompt},
         "translation" : agent_prompt,
-        "web_search": agent_prompt
+        "web_search": agent_prompt,
+        "general_prompt": general_prompt
     }
     
-    return prompts[usage]
+    return prompts
+
 from langchain.chains.combine_documents import create_stuff_documents_chain
 
 def get_chain(prompt):
@@ -98,7 +111,7 @@ def get_agent_executor(usage, retriever):
     Returns:
         agent_executor: The agent executor object.
     """
-    search = TavilySearchResults(k=3)
+    search = TavilySearchResults(k=6)
     tool = create_retriever_tool(
         retriever=retriever,
         name="document_search",
@@ -106,19 +119,10 @@ def get_agent_executor(usage, retriever):
     )
     
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-    agent_prompt = get_prompt(usage)
+    agent_prompt = get_prompt()[usage]
     agent = create_openai_functions_agent(llm, [search, tool], agent_prompt)
     return AgentExecutor(agent=agent, tools=[search, tool], verbose=False)
 
-
-
-# 세션 ID를 기반으로 세션 기록을 가져오는 함수
-
-def get_session_history(session_id: str, session_histories) -> BaseChatMessageHistory:
-    # 해당 세션 ID에 대한 세션 기록 반환
-    if session_id not in session_histories:  # 세션 ID가 없으면
-        session_histories[session_id] = ChatMessageHistory()
-    return session_histories[session_id]  # 해당 세션 ID에 대한 세션 기록 반환
 
 def generate_questions(answer) -> List:
     """
@@ -166,7 +170,6 @@ def remove_sources(response: str) -> str:
 
 
 UPLOAD_DIRECTORY = "uploads"
-session_histories = {}  # 세션 히스토리를 저장할 딕셔너리
 uploaded_files = {}  # 세션 ID에 따른 업로드된 파일을 저장할 딕셔너리
 async def process_documents(doc_list: List, 
                             files: Optional[List[UploadFile]] = None, 
@@ -190,24 +193,49 @@ async def process_documents(doc_list: List,
                 uploaded_files[session_id] = []
             uploaded_files[session_id].append(file_name)  # 세션 ID에 파일 경로 추가
             os.remove(file_name)
-        # URL 처리
-    if url:
-        print(f"Processing URL: {url}")
-        # URL의 내용을 로드하는 로직 추가
-        loader = get_web_loader(url)  # URL에 대한 로더 생성
-        splitted_documents = get_documents(loader=loader, chunk_size=300, chunk_overlap=30)
-        print(splitted_documents[0])
-        doc_list.extend(splitted_documents)
 
-        # URL 처리에 대한 추가 로직 (예: 세션에 URL 저장)
-        if session_id not in uploaded_files:
-            uploaded_files[session_id] = []
-        uploaded_files[session_id].append(url)  # 세션 ID에 URL 추가
     return doc_list
 
+async def process_url(
+                    doc_list: List, 
+                    files: Optional[List[UploadFile]] = None, 
+                    url: Optional[str] = None,
+                    session_id: str = None) -> List:
+    if url:
+        print(f"Uploaded url: {url}")
 
+        # 파일의 확장자에 따라 적절한 로더 사용
+        loader = get_web_loader(url)
+        splitted_documents = get_documents(loader=loader, chunk_size=200, chunk_overlap=50)
+        doc_list.extend(splitted_documents)
+        
+        if doc_list:
+            print(len(doc_list))
+        else:
+            print("빈 문서입니다.")
+        # 폴더에 url 정보 추가가
+        if session_id not in uploaded_files:
+            uploaded_files[session_id] = []
+        uploaded_files[session_id].append(url)  # 세션 ID에 파일 경로 추가
+    return doc_list
+
+session_histories = {}  # 세션 히스토리를 저장할 딕셔너리
 # 세션 ID를 기반으로 세션 기록을 가져오는 함수
 def get_session_history(session_id: str) -> ChatMessageHistory:
     if session_id not in session_histories:  # 세션 ID가 없으면
         session_histories[session_id] = ChatMessageHistory()  # 새로운 ChatMessageHistory 객체 생성
+    # print(session_histories.keys())
     return session_histories[session_id]  # 해당 세션 ID에 대한 세션 기록 반환
+
+
+async def reset_session(session_id: str):
+    session_history = get_session_history(session_id)
+    session_history.clear()  # 세션 내역 삭제 (예시)   
+    print(f"Session ID: {session_history}")
+    return {"message": "Session reset successful"}
+
+def validate_url(url):
+    if not url.startswith(('http://', 'https://')):
+        raise ValueError("유효하지 않은 url입니다")
+    return url
+
