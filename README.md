@@ -1,4 +1,4 @@
-# assistant-web-app
+# 🤗 assistant-web-app
 ## 페이지 주소
 http://localhost:8000/
 
