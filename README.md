@@ -12,8 +12,8 @@
 - **요약**: 뉴스기사, 블로그, 보고서 등 요약하여 필요한 정보를 빠르게 파악할 수 있습니다.
   - **시연영상** | [유튜브 링크](https://youtu.be/uf5FQ-ABIXI)
 - **장소 추천**: 회식, 모임, 약속 장소 선정에 도움을 드립니다.
-  - **시연영상** | [유튜브 링크]([https://youtu.be/cjpMEdkHYR4](https://youtu.be/JfzARGSsxNQ))
-
+  - **시연영상** | [유튜브 링크](https://youtu.be/JfzARGSsxNQ)
+ 
 
 - **개발중인 기능**: 이메일 작성, 보고서 작성, 번역기
 
